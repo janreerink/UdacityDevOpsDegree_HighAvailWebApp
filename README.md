@@ -1,7 +1,11 @@
+[//]: # (Image References)
+[image0]: ./data/great_success.png "success"
+[image1]: ./data/network_diagram.png "network"
+
 # UdacityDevOpsDegree_HighAvailWebApp
 Second project of the Udacity DevOps Engineer Nanodegree: deploy a highly available web-application on AWS
 
-![Network](data/network_diagram.png)
+![alt text][image1]
 
 ## Preparation
 - Set up user and install the AWS CLI.
@@ -35,6 +39,6 @@ To delete the stack:
 
 The stack's output section contains a link to the load-balancer.  
 
-![Success](data/great_success.png)
+![alt text][image0]
 
 
