@@ -33,6 +33,8 @@ Or directly in CLI:
 To delete the stack:  
   `aws cloudformation delete-stack --stack-name UdacityHAWebApp --region=us-west-2`
 
-The stack's output section contains a link to the load-balancer.
+The stack's output section contains a link to the load-balancer.  
+
 ![Success](data/great_success.png)
+
 
