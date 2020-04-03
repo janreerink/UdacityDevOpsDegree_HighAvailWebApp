@@ -1,5 +1,5 @@
 [//]: # (Image References)
-[image0]: ./data/great_success.png "success"
+[image0]: ./data/success.png "success"
 [image1]: ./data/network_diagram.png "network"
 
 # UdacityDevOpsDegree_HighAvailWebApp
