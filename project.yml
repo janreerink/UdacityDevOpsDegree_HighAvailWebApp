@@ -28,9 +28,17 @@ Parameters:
         Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
         Type: String
         Default: 10.0.3.0/24
+    SSHLocation: 
+      Description: "The IP address range that can be used to SSH to the EC2 instances"
+      Type: String
+      MinLength: 9
+      MaxLength: 18
+      Default: "0.0.0.0/0"
+      AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+      ConstraintDescription: "must be a valid IP CIDR range of the form x.x.x.x/x."
 
-Description:
-# CloudFormation script for the second project of the Udacity DevOps Nanodegree to deploy a highly available web-app
+Description: >
+ CloudFormation script for the second project of the Udacity DevOps Nanodegree to deploy a highly available web-app
 Resources:
 #networking resources: VPC, 2xpublic, 2xprivate subnet, IGW, IGW attachment, NATs, nat attachments, routetable and associations
     VPC: 
@@ -194,66 +202,220 @@ Resources:
             RouteTableId: !Ref PrivateRouteTable2
             SubnetId: !Ref PrivateSubnet2
 
-  Outputs: 
-  #Bonus points for useful outputs!
+    LBSecGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Allow http to our load balancer
+        VpcId:
+          !Ref VPC
+        SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+    WebServerSecGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Allow http to our hosts and SSH from local only
+        VpcId:
+          !Ref VPC
+        SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+        SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+
+    WebAppLaunchConfig:
+      Type: AWS::AutoScaling::LaunchConfiguration
+      Properties:
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash 
+            sudo apt-get update -y
+            sudo apt-get install unzip awscli -y
+            sudo apt-get install apache2 -y
+            sudo systemctl start apache2.service
+            cd /var/www/html
+            aws s3 cp s3://udacity-demo-1/udacity.zip .
+            unzip -o udacity.zip
+        ImageId: ami-0d1cd67c26f5fca19 #ami-005bdb005fb00e791
+        IamInstanceProfile: !Ref RootInstanceProfile
+        SecurityGroups:
+        - Ref: WebServerSecGroup
+        InstanceType: t3.medium
+        BlockDeviceMappings:
+        - DeviceName: "/dev/sdk"
+          Ebs:
+            VolumeSize: '10'
+    
+    WebAppGroup:
+      Type: AWS::AutoScaling::AutoScalingGroup
+      Properties:
+        VPCZoneIdentifier:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+        LaunchConfigurationName:
+          Ref: WebAppLaunchConfig
+        MinSize: '3'
+        MaxSize: '5'
+        TargetGroupARNs:
+        - Ref: WebAppTargetGroup
+
+    WebAppLB:
+      Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+      Properties:
+        Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+        SecurityGroups:
+        - Ref: LBSecGroup
+
+    Listener:
+      Type: AWS::ElasticLoadBalancingV2::Listener
+      Properties:
+        DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: WebAppTargetGroup
+        LoadBalancerArn: !Ref WebAppLB
+        Port: '80'
+        Protocol: HTTP
+
+    ALBListenerRule:
+      Type: AWS::ElasticLoadBalancingV2::ListenerRule
+      Properties:
+        Actions:
+        - Type: forward
+          TargetGroupArn: !Ref 'WebAppTargetGroup'
+        Conditions:
+        - Field: path-pattern
+          Values: [/]
+        ListenerArn: !Ref 'Listener'
+        Priority: 1
+
+    WebAppTargetGroup:
+      Type: AWS::ElasticLoadBalancingV2::TargetGroup
+      Properties:
+        HealthCheckIntervalSeconds: 35
+        HealthCheckPath: /
+        HealthCheckProtocol: HTTP
+        HealthCheckTimeoutSeconds: 30
+        HealthyThresholdCount: 2
+        Port: 80
+        Protocol: HTTP
+        UnhealthyThresholdCount: 5
+        VpcId: !Ref VPC
+
+    S3CodeBucketCopyRole:
+        Type: AWS::IAM::Role
+        Properties:
+          AssumeRolePolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Principal:
+                  Service: ec2.amazonaws.com
+                Action: sts:AssumeRole
+          Path: /
+
+    RootInstanceProfile:
+      Type: AWS::IAM::InstanceProfile
+      Properties:
+        Path: /
+        Roles:
+          - !Ref S3CodeBucketCopyRole
+
+    S3CodeBucketCopyPolicy:
+      Type: AWS::IAM::Policy
+      Properties: 
+        PolicyName: S3CodeBucketCopyPolicy
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement: 
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource: "*"
+        Roles: 
+          - !Ref S3CodeBucketCopyRole
 
 
-      VPC: 
+Outputs: 
+    VPC: 
         Description: A reference to the created VPC
         Value: !Ref VPC
         Export:
-          Name: !Sub ${EnvironmentName}-VPCID
+            Name: !Sub ${EnvironmentName}-VPCID
 
     VPCPublicRouteTable:
         Description: Public Routing
         Value: !Ref PublicRouteTable
         Export:
-          Name: !Sub ${EnvironmentName}-PUB-RT
+            Name: !Sub ${EnvironmentName}-PUB-RT
 
     VPCPrivateRouteTable1:
         Description: Private Routing AZ1
         Value: !Ref PrivateRouteTable1
         Export:
-          Name: !Sub ${EnvironmentName}-PRI1-RT
+            Name: !Sub ${EnvironmentName}-PRI1-RT
 
     VPCPrivateRouteTable2:
         Description: Private Routing AZ2
         Value: !Ref PrivateRouteTable2
         Export:
-          Name: !Sub ${EnvironmentName}-PRI2-RT
+            Name: !Sub ${EnvironmentName}-PRI2-RT
 
     PublicSubnets:
         Description: A list of the public subnets
         Value: !Join [ ",", [ !Ref PublicSubnet1, !Ref PublicSubnet2 ]]
         Export:
-          Name: !Sub ${EnvironmentName}-PUB-NETS
+            Name: !Sub ${EnvironmentName}-PUB-NETS
 
     PrivateSubnets:
         Description: A list of the private subnets
         Value: !Join [ ",", [ !Ref PrivateSubnet1, !Ref PrivateSubnet2 ]]
         Export:
-          Name: !Sub ${EnvironmentName}-PRIV-NETS
+            Name: !Sub ${EnvironmentName}-PRIV-NETS
 
     PublicSubnet1:
         Description: A reference to the public subnet in the 1st Availability Zone
         Value: !Ref PublicSubnet1
         Export:
-          Name: !Sub ${EnvironmentName}-PUB1-SN
+            Name: !Sub ${EnvironmentName}-PUB1-SN
 
     PublicSubnet2: 
         Description: A reference to the public subnet in the 2nd Availability Zone
         Value: !Ref PublicSubnet2
         Export:
-          Name: !Sub ${EnvironmentName}-PUB2-SN
+            Name: !Sub ${EnvironmentName}-PUB2-SN
 
     PrivateSubnet1:
         Description: A reference to the private subnet in the 1st Availability Zone
         Value: !Ref PrivateSubnet1
         Export:
-          Name: !Sub ${EnvironmentName}-PRI1-SN
+            Name: !Sub ${EnvironmentName}-PRI1-SN
 
     PrivateSubnet2: 
         Description: A reference to the private subnet in the 2nd Availability Zone
         Value: !Ref PrivateSubnet2
         Export:
-          Name: !Sub ${EnvironmentName}-PRI2-SN
+            Name: !Sub ${EnvironmentName}-PRI2-SN
+    LoadBalancerDNS:
+        Value: !Join [ "", [ 'http://', !GetAtt WebAppLB.DNSName ]]
+        Export:
+          Name: "DNS-URL" 

@@ -1,6 +1,8 @@
 # UdacityDevOpsDegree_HighAvailWebApp
 Second project of the Udacity DevOps Engineer Nanodegree: deploy a highly available web-application on AWS
 
+![Network](data/network_diagram.png)
+
 ## Preparation
 - Set up user and install the AWS CLI.
   - Log in to AWS management console
@@ -18,12 +20,19 @@ Second project of the Udacity DevOps Engineer Nanodegree: deploy a highly availa
   
 
   ## Deploy network and servers
-  Set up network and servers in CLI:
-  `aws cloudformation create-or-update --stack-name Udacity_WebApp --template-body network.yml --parameters network-parameters.json --region=us-west-2 --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND`
-  `aws cloudformation create-or-update --stack-name Udacity_WebApp --template-body servers.yml --parameters server-parameters.json --region=us-west-2 --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND`
-  
-  
-  Delete stack:
-  `aws cloudformation delete-stack --stack-name Udacity_WebApp --region=us-west-2`
+  To create or update use:  
 
+`./create Udacity-WebApp project.yml project-parameters.json`  
+
+`./update Udacity-WebApp project.yml project-parameters.json`
+
+Or directly in CLI:  
+
+`aws cloudformation create-stack --stack-name Udacity-HAWebApp --template-body file://project.yml --parameters file://project-parameters.json --region=us-west-2 --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND`
+
+To delete the stack:  
+  `aws cloudformation delete-stack --stack-name UdacityHAWebApp --region=us-west-2`
+
+The stack's output section contains a link to the load-balancer.
+![Success](data/great_success.png)
 
